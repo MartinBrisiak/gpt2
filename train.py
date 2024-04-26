@@ -62,9 +62,9 @@ print(f"all the unique characters: {''.join(chars)}\nvocab size: {vocab_size:,}"
 stoi = { ch:i for i,ch in enumerate(chars) }
 itos = { i:ch for i,ch in enumerate(chars) }
 def encode(s):
-    return [stoi[c] for c in s] # encoder: take a string, output a list of integers
+    return [stoi[c] for c in s]  # encoder: take a string, output a list of integers
 def decode(l):
-    return ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
+    return ''.join([itos[i] for i in l])  # decoder: take a list of integers, output a string
 with open(os.path.join(out_dir, 'meta.json'), 'w') as f:
     json.dump({
         'vocab_size': vocab_size,
