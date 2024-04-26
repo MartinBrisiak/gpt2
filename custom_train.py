@@ -166,7 +166,6 @@ def estimate_validation_loss():
         with ctx:
             logits, loss = model(inputs, targets)
         losses[batch_idx] = loss.item()
-        break
     sample_tokens = inputs[0].cpu().detach().numpy()
     input_prompt = decode(sample_tokens).replace('\n',' ')
     generated_text = generate_samples(model, input_prompt[:200])
@@ -190,7 +189,7 @@ def get_lr(it):
     return min_lr + coeff * (learning_rate - min_lr)
 
 
-epochs = 2
+epochs = 20
 running_mfu = -1.0
 with SummaryWriter(log_dir) as writer:
     for epoch_idx in range(epochs):
