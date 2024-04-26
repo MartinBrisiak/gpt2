@@ -8,6 +8,7 @@ import pandas as pd
 import tiktoken
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
@@ -126,6 +127,23 @@ optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta
 print("compile model")
 model = torch.compile(model)
 
+
+# Function to generate text samples
+@torch.no_grad()
+def generate_samples(model, prompt, max_length=100, temperature=1.0):
+    model.eval()
+    prompt_encoded = torch.tensor(encode(prompt), dtype=torch.long, device=device).unsqueeze(0)
+    new_tokens = []
+    for _ in range(max_length):
+        logits, loss = model(prompt_encoded)
+        next_token_logits = logits[0, -1, :] / temperature
+        next_token_probs = F.softmax(next_token_logits, dim=-1)
+        next_token = torch.multinomial(next_token_probs, num_samples=1)
+        prompt_encoded = torch.cat((prompt_encoded, next_token.unsqueeze(0)), dim=1)
+        new_tokens.append(next_token.unsqueeze(0))
+    return decode(torch.cat(new_tokens).squeeze().tolist())
+
+
 @torch.no_grad()
 def estimate_train_loss():
     model.eval()
@@ -134,11 +152,11 @@ def estimate_train_loss():
         inputs, targets = next(iter(train_dataloader))
         with ctx:
             logits, loss = model(inputs, targets)
-        print(decode(inputs.cpu().detach().numpy()[0]))
         losses[evaluation_index] = loss.item()
     mean_loss = losses.mean()
     model.train()
     return mean_loss
+
 
 @torch.no_grad()
 def estimate_validation_loss():
@@ -148,6 +166,11 @@ def estimate_validation_loss():
         with ctx:
             logits, loss = model(inputs, targets)
         losses[batch_idx] = loss.item()
+        break
+    sample_tokens = inputs[0].cpu().detach().numpy()
+    input_prompt = decode(sample_tokens).replace('\n',' ')
+    generated_text = generate_samples(model, input_prompt[:200])
+    print(f"input: {input_prompt[:200]}\noutput: {generated_text}")
     mean_loss = losses.mean()
     model.train()
     return mean_loss
@@ -212,9 +235,12 @@ with SummaryWriter(log_dir) as writer:
             mfu = model.estimate_mfu(batch_size * gradient_accumulation_steps, delta_time_of_iter)
             running_mfu = mfu if running_mfu == -1.0 else 0.9 * running_mfu + 0.1 * mfu
             print(f"iter {iter_num}: loss {lossf:.4f}, time {delta_time_of_iter:.0f}s, mfu {running_mfu*100:.2f}%")
-        # todo val eval
+        
+        # eval
+        start_of_val_eval = time.time()
         validation_loss = estimate_validation_loss()
-        print(f"epoch {epoch_idx}: validation loss {validation_loss:.4f}")
+        validation_delta_time = time.time() - start_of_val_eval
+        print(f"epoch {epoch_idx}: validation loss {validation_loss:.4f}, time {validation_delta_time:.0f}")
         writer.add_scalar("Loss/validation", validation_loss, iter_num)
         if validation_loss < best_val_loss:
             best_val_loss = validation_loss
