@@ -47,8 +47,8 @@ os.makedirs(log_dir, exist_ok=True)
 
 # dataset
 df = pd.read_csv("./chat.csv")
-# data = "\n".join(df[df["from"] == "martin"]["messages"].to_list())
-data = "\n".join(df["messages"].to_list())
+# data = "\n".join(df[df["from"] == "martin"]["message"].to_list())
+data = "\n".join(df["message"].to_list())
 chars = sorted(list(set(data)))
 vocab_size = len(chars)
 print(f"all the unique characters: {''.join(chars)}\nvocab size: {vocab_size:,}")
